@@ -3,6 +3,17 @@
 from enum import Enum
 
 """
+Профит считается гипотететически
+при открытии ордера профит вычисляеся как если бы сразу продать с учетом спреда
+"""
+
+# комиссия (% / 100)
+COMMISION_RATE = 0.001
+
+# спред (% / 100)
+SPREAD_RATE = 0.0005
+
+"""
 Возможные типы действия
 """
 class ActionType(Enum):
@@ -29,6 +40,16 @@ class Order:
       self.price = price
       self.qty = qty
 
+  def getPriceWithSpread(self):
+    k =  (1 + SPREAD_RATE) if self.type == ActionType.BUY else (1 - SPREAD_RATE)
+    return self.price * k
+  
+  def calcAmount(self):
+    return self.price * self.qty
+  
+  def calcAmountWithSpread(self):
+    return self.getPriceWithSpread() * self.qty
+
   def toString(self): 
     return "type: {}, price: {}, qty: {}".format(self.type.name, self.price, self.qty)
 
@@ -51,13 +72,16 @@ class Position:
   # текущий профит только с учетом оредоров на закрытие
   currentProfit = 0
 
+  # суммарная текущая комиссия
+  totalCommission = 0
+
   def __init__(self, openOrder):
     assert openOrder.type == ActionType.BUY or openOrder.type == ActionType.SELL, 'wrong order type'
     self.openOrder = openOrder
     self.closeOrders = []
     self.isClosed = False
     self.remainQtyForClose = openOrder.qty
-    self.currentProfit = -openOrder.price * openOrder.qty
+    self.totalCommission = self.openOrder.price * self.openOrder.qty * COMMISION_RATE
 
   # Добавить ордер на закрытие
   def addCloseOrder(self, closeOrder):
@@ -73,8 +97,8 @@ class Position:
     # уменьшить оставшееся кол-ва для закрытия
     self.remainQtyForClose = self.remainQtyForClose - closeQty 
     
-    # открытие было как покупка (long'вая)
-    self.currentProfit += closeOrder.price * closeOrder.qty
+    # учесть комиссию
+    self.totalCommission += closeOrder.price * closeQty * COMMISION_RATE
 
     # если больше нечего закрывать, то позиция закрыта
     if (self.remainQtyForClose <= 0.01):
@@ -82,18 +106,29 @@ class Position:
 
     return closeOrder
 
-  # расчитать окончательный профит с учетом не закрытой части по заданной цене
-  def calcProfit(self, closePrice = None):
-    result = sum(o.qty * o.price for o in self.closeOrders) - self.openOrder.price * self.openOrder.qty
+  def calcProfit(self, closePrice):
+    closeAmount = sum(o.calcAmountWithSpread() for o in self.closeOrders)
 
-    price = float(0 if closePrice is None else closePrice)
-    if (price > 0):
-      result += self.remainQtyForClose * price
+    # если позиция не закрыта, то надо создать фиктивный ордер для учета оставшейся части
+    if (self.isClosed == False):
+      type = ActionType.SELL if (self.openOrder.type == ActionType.BUY) else ActionType.BUY
+      dummyOrder = Order(type = type, price = closePrice, qty = self.remainQtyForClose)
+      dummyAmount = dummyOrder.calcAmountWithSpread()
+    else:
+      dummyAmount = 0
 
-    if (self.openOrder.type == ActionType.SELL and self.remainQtyForClose <= 0.01):
-      result *= -1;
+    # общая сумма закрытия
+    closeAmount += dummyAmount
 
-    return result
+    if (self.openOrder.type == ActionType.BUY):
+      result = closeAmount - self.openOrder.calcAmountWithSpread() 
+    else:
+      result = self.openOrder.calcAmountWithSpread() - closeAmount
+
+    # для фиктивного оредра на учесть комиссию
+    commision = self.totalCommission + dummyAmount * COMMISION_RATE
+
+    return (result - commision)
 
   def show(self, index = None): 
     header = '== Position ==' if (index == None) else '== #{} =='.format(index)
@@ -128,13 +163,12 @@ class PositionStore:
       p = Position(openOrder=order)
       self.positions.append(p)
 
-  def calcAllProfit(self, closePrice = None):
+  def calcAllProfit(self, closePrice):
     res = 0.0
     for p in self.positions:
-      print ("profit = {}".format(p.calcProfit(closePrice)))
+      #print ("profit = {}".format(p.calcProfit(closePrice)))
       res += p.calcProfit(closePrice)
 
-    #return sum(p.calcProfit(closePrice) for p in self.positions)
     return res
   
   def show(self):

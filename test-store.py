@@ -7,9 +7,10 @@ store = PositionStore()
 #1
 o1 = Order(type = ActionType.BUY, price = 31.2, qty = 10)
 store.addOrder(o1)
-print ("profit = {}".format(store.calcAllProfit()))
+store.addOrder(Order(type = ActionType.SELL, price = 31.2, qty = 10))
+print ("profit = {}".format(store.calcAllProfit(31.5)))
 #store.show()
-
+"""
 #2
 o2 = Order(type = ActionType.BUY, price = 32.7, qty = 20)
 store.addOrder(o2)
@@ -21,3 +22,4 @@ store.addOrder(o3)
 store.show()
 
 print ("all profit = {}".format(store.calcAllProfit()))
+"""

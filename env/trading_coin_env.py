@@ -85,7 +85,8 @@ class TradingCoinEnv(gym.Env):
         self.current_balance -= qty
         price = self.df.at[self.current_step, "avrPrice"]
         ord = Order(type = actionType, price = price, qty = qty)
-        self.pos.addOrder(self, order):
+        self.pos.addOrder(order)
+        reward = self.pos
 
     
 
