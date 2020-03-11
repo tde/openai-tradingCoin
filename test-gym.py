@@ -9,10 +9,10 @@ from env.trading_coin_env import TradingCoinEnv
 
 props = {
     #начальный баланс на счете
-    'balance_init': 1000,
+    'balance_init': 4000,
 
     #начальное кол-во монет на счете
-    'crypto_coins_cnt_init': 200,
+    'coins_init': 200,
 
     #на сколько частей можно разбить доступный остасток для покупки/продажи, 
     #т.е. покупать не на всю доступную сумму а на ее часть
@@ -28,7 +28,7 @@ props = {
     'seconds_in_intrerval': 15,
 
     #сколько исторических интервалов до текущего надо учитывать
-    'lookback_window_size': 20
+    #'lookback_window_size': 20
 }
 
 class Config:
@@ -45,4 +45,6 @@ df = pd.read_csv(file_name)
 df.rename(columns=lambda x: x.strip(), inplace=True)
 
 # The algorithms require a vectorized environment to run
-env = DummyVecEnv([lambda: TradingCoinEnv(df, cfg)])
+#env = DummyVecEnv([lambda: TradingCoinEnv(df, cfg)])
+
+te = TradingCoinEnv(df, cfg)

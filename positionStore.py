@@ -11,169 +11,101 @@ from enum import Enum
 COMMISION_RATE = 0.001
 
 # спред (% / 100)
-SPREAD_RATE = 0.0005
+SPREAD_RATE = 0.0004
 
 """
 Возможные типы действия
 """
 class ActionType(Enum):
-  BUY = 0
-  SELL = 1
-  HOLD = 2
+    BUY = 0
+    SELL = 1
+    HOLD = 2
 
 """
 Один order
-  qty - это кол-во монет которые покупаются/продаются
+  qty - это кол-во usd/монет которые покупаются/продаются
 """
 class Order:
-  type = None
-  price = 0
-  qty = 0
+    type = None
+    price = 0
+    qty = 0
 
-  def __init__(self, type = None, price = None, qty = None, order = None):
-    if (order != None):
-      self.type = order.type
-      self.price = order.price
-      self.qty = qty
-    else:
-      self.type = type
-      self.price = price
-      self.qty = qty
+    def __init__(self, type = None, price = None, qty = None, order = None):
+        if (order != None):
+            self.type = order.type
+            self.price = order.price
+            self.qty = qty
+        else:
+            self.type = type
+            self.price = price
+            self.qty = qty
 
-  def getPriceWithSpread(self):
-    k =  (1 + SPREAD_RATE) if self.type == ActionType.BUY else (1 - SPREAD_RATE)
-    return self.price * k
+    def getPriceWithSpread(self):
+        k =  (1 + SPREAD_RATE) if self.type == ActionType.BUY else (1 - SPREAD_RATE)
+        return self.price * k
   
-  def calcAmount(self):
-    return self.price * self.qty
+    def calcAmount(self):
+        return self.price * self.qty
   
-  def calcAmountWithSpread(self):
-    return self.getPriceWithSpread() * self.qty
-
-  def toString(self): 
-    return "type: {}, price: {}, qty: {}".format(self.type.name, self.price, self.qty)
-
-"""
-Одна позиция
-"""
-class Position:
-  # позиция полностью закрыта
-  isClosed = False
-
-  # order на открытие должен быть только один
-  openOrder = None
-
-  # order'ов на закрытие может быть сколько угодно
-  closeOrders = []
-
-  # оставшееся кол-во для закрытия
-  remainQtyForClose = 0
-
-  # текущий профит только с учетом оредоров на закрытие
-  currentProfit = 0
-
-  # суммарная текущая комиссия
-  totalCommission = 0
-
-  def __init__(self, openOrder):
-    assert openOrder.type == ActionType.BUY or openOrder.type == ActionType.SELL, 'wrong order type'
-    self.openOrder = openOrder
-    self.closeOrders = []
-    self.isClosed = False
-    self.remainQtyForClose = openOrder.qty
-    self.totalCommission = self.openOrder.price * self.openOrder.qty * COMMISION_RATE
-
-  # Добавить ордер на закрытие
-  def addCloseOrder(self, closeOrder):
-    assert self.isClosed == False, 'position already closed'
-    assert not (closeOrder.type == self.openOrder.type), 'close and order has same type' 
-    assert closeOrder.type == ActionType.BUY or closeOrder.type == ActionType.SELL, 'wrong order type'
-
-    # вычислить кол-во для закрытия
-    closeQty = self.remainQtyForClose if closeOrder.qty > self.remainQtyForClose else closeOrder.qty
-    self.closeOrders.append(Order(order=closeOrder, qty=closeQty))
-    closeOrder.qty -= closeQty
-
-    # уменьшить оставшееся кол-ва для закрытия
-    self.remainQtyForClose = self.remainQtyForClose - closeQty 
+    def calcAmountWithSpread(self):
+        if (self.type == ActionType.BUY):
+            return self.qty / self.getPriceWithSpread()
+        else:
+            return self.qty * self.getPriceWithSpread()
     
-    # учесть комиссию
-    self.totalCommission += closeOrder.price * closeQty * COMMISION_RATE
 
-    # если больше нечего закрывать, то позиция закрыта
-    if (self.remainQtyForClose <= 0.01):
-      self.isClosed = True
-
-    return closeOrder
-
-  def calcProfit(self, closePrice):
-    closeAmount = sum(o.calcAmountWithSpread() for o in self.closeOrders)
-
-    # если позиция не закрыта, то надо создать фиктивный ордер для учета оставшейся части
-    if (self.isClosed == False):
-      type = ActionType.SELL if (self.openOrder.type == ActionType.BUY) else ActionType.BUY
-      dummyOrder = Order(type = type, price = closePrice, qty = self.remainQtyForClose)
-      dummyAmount = dummyOrder.calcAmountWithSpread()
-    else:
-      dummyAmount = 0
-
-    # общая сумма закрытия
-    closeAmount += dummyAmount
-
-    if (self.openOrder.type == ActionType.BUY):
-      result = closeAmount - self.openOrder.calcAmountWithSpread() 
-    else:
-      result = self.openOrder.calcAmountWithSpread() - closeAmount
-
-    # для фиктивного оредра на учесть комиссию
-    commision = self.totalCommission + dummyAmount * COMMISION_RATE
-
-    return (result - commision)
-
-  def show(self, index = None): 
-    header = '== Position ==' if (index == None) else '== #{} =='.format(index)
-    print (header)
-    print ('isClosed: {}, remainQtyForClose: {}, profit: {}'.format(self.isClosed, self.remainQtyForClose, self.currentProfit))
-    print ('openOrder: \n\t{}'.format(self.openOrder.toString()))
-    print ('closeOrders:')
-    for o in self.closeOrders: 
-      print('\t{}'.format(o.toString()))
-    print ("\n")
+    def toString(self): 
+        return "type: {}, price: {}, qty: {}".format(self.type.name, self.price, self.qty)
 
 """
-Хранилище позиций
+ Позиция для одной монеты
 """
 class PositionStore:
-  positions = []
+    # все order'a
+    orders = []
 
-  def __init__(self):
-    self.positions = []
+    # сколько на данный момент есть USD
+    current_usd = 0
 
-  def addOrder(self, order):
-    # распределить сумму из order'a по всем отрытым позициям
-    for p in self.positions:
-      if (p.isClosed == False and p.openOrder.type != order.type):
-        order = p.addCloseOrder(order)
-        assert not order.qty < 0, 'error qty in order'
-        if (order.qty == 0):
-          break
+    # сколько на данный момент есть монет
+    current_coins = 0
 
-    # не вся сумма распределан по позициям,то открыть новую
-    if (order.qty > 0):
-      p = Position(openOrder=order)
-      self.positions.append(p)
+    # начальный баланс пересчитанный в USD
+    initial_total_balance = 0
 
-  def calcAllProfit(self, closePrice):
-    res = 0.0
-    for p in self.positions:
-      #print ("profit = {}".format(p.calcProfit(closePrice)))
-      res += p.calcProfit(closePrice)
+    def __init__(self, initial_usd, initial_coins, initial_price):
+        self.current_usd = initial_usd
+        self.current_coins = initial_coins
+        self.initial_price = initial_price
+        self.initial_total_balance = initial_usd + initial_price * initial_coins
 
-    return res
-  
-  def show(self):
-    print('== ALL Positions ==')
-    i = 0
-    for p in self.positions:
-      i += 1
-      p.show(i)
+        # максимальное увеличение активов в два раза на заданном интервале удержания позиции
+        self.max_usd = 2 * (initial_usd + initial_coins * initial_price)
+        self.max_coins = 2 * (initial_coins + initial_usd / initial_price)
+
+    # Добавить ордер на закрытие
+    def addOrder(self, order):
+        # это покупка монет за USD
+        if (order.type == ActionType.BUY):
+            self.current_usd -= order.qty
+            self.current_coins += order.calcAmountWithSpread() * (1 - COMMISION_RATE)
+        # это продажа монет 
+        else:
+            self.current_usd += order.calcAmountWithSpread() * (1 - COMMISION_RATE)
+            self.current_coins -= order.qty
+
+        self.orders.append(order)
+
+    # вычислить суммарный баланс в USD
+    def calcTotalBalance(self, current_price):
+        price = current_price if current_price != None else self.initial_price
+        dummy_order = Order(type = ActionType.SELL, price = price, qty = self.current_coins)
+        return self.current_usd + dummy_order.calcAmountWithSpread() * (1 - COMMISION_RATE)
+
+    def calcProfit(self, current_price):
+        return self.calcTotalBalance(current_price) - self.initial_total_balance
+
+    def show(self, current_price): 
+        profit = self.calcTotalBalance(current_price) - self.initial_total_balance
+        print ('Orders count: {}, current_usd: {}, current_coins: {}, profit = {}'
+        .format(len(self.orders), self.current_usd, self.current_coins, profit))

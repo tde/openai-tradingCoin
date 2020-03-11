@@ -2,111 +2,179 @@ import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
 import numpy as np
+import random
 from positionStore import PositionStore
 from positionStore import Order
 from positionStore import ActionType
 
 class TradingCoinEnv(gym.Env):
-  metadata = {'render.modes': ['human']}
+    metadata = {'render.modes': ['human']}
 
-  #хранилище позиций
-  pos = None
+    #хранилище позиций
+    pos = None
 
-  #индекс текущей записи (на которую указывает анализируемый временной отрезок)
-  current_step = 0
+    #индекс текущей записи (на которую указывает анализируемый временной отрезок)
+    current_index = 0
 
-  #текущий баланс в USD
-  current_balance = 0
+    # сколько всего выполнено интераций
 
-  #текущее кол-во монет
-  current_crypto_coins_cnt: 0
 
-  def __init__(self, df, cfg):
-    self.df = df
-    self.cfg = cfg
+    #текущий баланс в USD
+    current_balance = 0
 
-    self.seed(123)
-          
-    #сколько исторических интревалов учитывается при анализе
-    self.intervals_analize_cnt = self.cfg.history_analise_minutes * 60 / self.cfg.seconds_in_intrerval
+    #текущее кол-во монет
+    current_crypto_coins_cnt = 0
 
-    #кол-во action'ов = насколько честей разбивается баланс (возможна покупка и продажа) + hold
-    self.actions_count = 2 * self.cfg.balance_parts + 1
+    def __init__(self, df, cfg):
+        self.df = df
+        self.cfg = cfg
 
-    #кол-во доступных action'ов (buy_1..N, sell_1..N, hold)
-    self.action_space = spaces.Discrete(self.actions_count)
+        self.seed(123)
+            
+        #сколько исторических интревалов учитывается при анализе
+        self.intervals_analize_cnt = self.cfg.history_analise_minutes * 60 / self.cfg.seconds_in_intrerval
 
-    #максимальный угол наклона для линейной регрессии в одном интервале
-    maxSlopeDegree = 2.0
+        #кол-во action'ов = насколько честей разбивается баланс (возможна покупка и продажа) + hold
+        self.actions_count = 2 * self.cfg.balance_parts + 1
 
-    #максимальные объем и кол-во сделок по покупке/продаже в одном интервале
-    maxSize = 30000.0
-    maxCount = 1000.0
+        #кол-во доступных action'ов (buy_1..N, sell_1..N, hold)
+        self.action_space = spaces.Discrete(self.actions_count)
 
-    #максимальное относительное измнение btc/usdt в процентах
-    maxChangeBtc = 2.0
+        #максимальный угол наклона для линейной регрессии в одном интервале
+        maxSlopeDegree = 2.0
 
-    minValues = np.array([-maxSlopeDegree, 0, 0, 0, 0, -maxChangeBtc])
-    maxValues = np.array([maxSlopeDegree, maxSize, maxSize, maxCount, maxCount, maxChangeBtc])
+        #максимальные объем и кол-во сделок по покупке/продаже в одном интервале
+        maxSize = 40000.0
+        maxCount = 1000.0
 
-    #диапазон изменений
-    self.observation_space = spaces.Box(minValues, maxValues, dtype=np.float32)
+        #максимальное относительное измнение btc/usdt в процентах
+        maxChangeBtc = 2.0
 
-    self.reset()
-  
-    print('init basic done')
+        # проверки на попадание в мин_макс значения
+        assert df[df['slope'] <= -maxSlopeDegree].shape[0] <= 0, 'Slope lowest then default min'
+        assert df[df['slope'] >= maxSlopeDegree].shape[0] <= 0, 'Slope greater then default max'
+        
+        assert df[df['buySize'] >= maxSize].shape[0] <= 0, 'maxBuySize greater then default max'
+        assert df[df['sellSize'] >= maxSize].shape[0] <= 0, 'maxSellSize greater then default max'
+        
+        assert df[df['buyCnt'] >= maxCount].shape[0] <= 0, 'maxBuyCount greater then default max'
+        assert df[df['sellCnt'] >= maxCount].shape[0] <= 0, 'maxSellCount greater then default max'
+        
+        assert df[df['bitcoinChange'] >= maxChangeBtc].shape[0] <= 0, 'maxBitcoinChange greater then default max'
+        assert df[df['bitcoinChange'] <= -maxChangeBtc].shape[0] <= 0, 'minBitcoinChange lowest then default min'
 
-  #случайное начальное состояние
-  def reset(self):
-    self.current_balance = self.cfg.balance_init
-    self.current_coin_count = self.cfg.crypto_coins_cnt_init
-    self.pos = PositionStore()
+        df['slope'] /= maxSlopeDegree
+        df['buySize'] /= maxSize
+        df['sellSize'] /= maxSize
+        df['buyCnt'] /= maxCount
+        df['sellCnt'] /= maxCount
+        df['bitcoinChange'] /= maxChangeBtc
 
-    maxIndex = self.df.shape[0] - self.cfg.max_minutes_hold_pos * 60 / self.cfg.seconds_in_intrerval
-    self.current_step = random.randint(self.intervals_analize_cnt,  maxIndex)
+        #assert df[df > 1].shape[0] <= 0, 'dataframe contain values greate then 1'
+        #assert df[df < -1].shape[0] <= 0, 'dataframe contain values lowest then -1'
 
-  def step(self, action):
-    assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
-    actionType, qtyRatio = self._parse_action(action)
-    #print (actionType, qtyRatio)
+        minValues = np.array([-1, 0, 0, 0, 0, -1])
+        maxValues = np.array([1, 1, 1, 1, 1, 1])
+
+        #диапазон изменений
+        self.observation_space = spaces.Box(minValues, maxValues, dtype=np.float32)
+
+        self.reset()
     
-    #fixme - доделать
-    if (actionType == ActionType.HOLD):
-      return 
+        print('init basic done')
 
-    if (self.current_balance <= 0):
-      reward = -1000
+    #случайное начальное состояние
+    def reset(self):
+        maxIndex = self.df.shape[0] - self.cfg.max_minutes_hold_pos * 60 / self.cfg.seconds_in_intrerval
+        
+        self.current_index = random.randint(self.intervals_analize_cnt, maxIndex)
+        self.current_interation = 0
+        
+        initial_price = self.df.at[self.current_index, "avrPrice"]
+
+        self.pos = PositionStore(initial_usd = self.cfg.balance_init, initial_coins = self.cfg.coins_init,
+                                initial_price = initial_price)
+
+        return self._next_observation()
+
+    def step(self, action):
+        assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
+
+        done = False
+
+        # следующий временной отрезок
+        self.current_index += 1
+        self.current_interation += 1
+
+        # цена на данном отрезке
+        cur_price = self.df.at[self.current_index, "avrPrice"]
+
+        # проверка что закончился максимальный срок удержания позиции
+        if (self.current_interation >= self.intervals_analize_cnt):
+            done = True
+
+        # распарсить тип действия и кол-во
+        actionType, qtyRatio = self._parse_action(action)
+        #print (actionType, qtyRatio)
+        qty = (self.cfg.balance_init if actionType == ActionType.BUY else self.cfg.crypto_coins_cnt_init) * qtyRatio
+        
+        # действия - это покупка или продажа
+        if (actionType != ActionType.HOLD):
+            # неначто покупать или нечего продавать
+            if ((actionType == ActionType.BUY and qty > self.pos.current_usd) or
+                (actionType == ActionType.SELL and qty > self.pos.current_coins)):
+                    reward = -100 * self.cfg.balance_init
+            else:
+                order = Order(type = actionType, price = cur_price, qty = qty)        
+                self.pos.addOrder(order)
+        
+        # расчет профита
+        reward = self.pos.calcProfit(current_price = cur_price)
+
+        obs = self._next_observation()
+        
+        return obs, reward, done, {}
+   
+    # Render the environment to the screen
+    def render(self, mode='human'):
+        cur_price = self.df.at[self.current_index, "avrPrice"]
+        profit = self.pos.calcProfit(cur_price = cur_price)
+
+        print(f'Step: {self.current_index}')
+        print(f'Orders count: {len(self.pos.orders)}')
+        print(f'Balance Usd: {self.pos.current_usd}')
+        print(f'Balance Coins: {self.pos.current_coins}')
+        print(f'Profit: {profit}')
+        
+    def close(self):
+        print('close')
+
+    def _parse_action(self, action_number):
+        if (action_number == (self.actions_count - 1)):
+            return [ActionType.HOLD, 0]
+        
+        actionInd = action_number // self.cfg.balance_parts
+        if (actionInd > 1):
+            raise "Action type errorr define"
+
+        actionType = ActionType(actionInd)
+        reminder = action_number % self.cfg.balance_parts
+        qtyRatio = (reminder + 1) * (1 / self.cfg.balance_parts)
+
+        return actionType, qtyRatio
     
-    if (actionType == ActionType.BUY):
-      qty = self.cfg.balance_init * qtyRatio
-      if (qty > self.current_balance):
-        reward = -1000
-      else:
-        self.current_balance -= qty
-        price = self.df.at[self.current_step, "avrPrice"]
-        ord = Order(type = actionType, price = price, qty = qty)
-        self.pos.addOrder(order)
-        reward = self.pos
+    def _next_observation(self):
+        ind1 = self.current_index - self.intervals_analize_cnt
+        ind2 = self.current_index 
 
-    
+        data = df.loc[ind1 : ind2, ['slope', 'buySize', 'sellSize', 'buyCnt', 'sellCnt', 'bitcoinChange']].to_numpy()
 
-    
-  def render(self, mode='human'):
-    print('render')
-    
-  def close(self):
-    print('close')
+        # текущий баланс в usd и coins
+        usd = self.pos.current_usd / self.pos.max_usd
+        coins = self.pos.current_coins / self.pos.max_coins
 
-  def _parse_action(self, action_number):
-    if (action_number == (self.actions_count - 1)):
-      return [ActionType.HOLD, 0]
-    
-    actionInd = action_number // self.cfg.balance_parts
-    if (actionInd > 1):
-      raise "Action type errorr define"
+        assert usd < 1 and coins < 1, 'usd or coins greater max'
 
-    actionType = ActionType(actionInd)
-    reminder = action_number % self.cfg.balance_parts
-    qtyRatio = (reminder + 1) * (1 / self.cfg.balance_parts)
+        balances = [[usd, coins]]
 
-    return actionType, qtyRatio
+        return np.concatenate((balances, data), axis=0)
