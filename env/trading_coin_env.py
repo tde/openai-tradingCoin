@@ -3,9 +3,9 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 import numpy as np
 import random
-from positionStore import PositionStore
-from positionStore import Order
-from positionStore import ActionType
+from env.positionStore import PositionStore
+from env.positionStore import Order
+from env.positionStore import ActionType
 
 class TradingCoinEnv(gym.Env):
     metadata = {'render.modes': ['human']}
@@ -73,8 +73,8 @@ class TradingCoinEnv(gym.Env):
         #assert df[df > 1].shape[0] <= 0, 'dataframe contain values greate then 1'
         #assert df[df < -1].shape[0] <= 0, 'dataframe contain values lowest then -1'
 
-        minValues = np.array([-1, 0, 0, 0, 0, -1])
-        maxValues = np.array([1, 1, 1, 1, 1, 1])
+        minValues = np.array([-1, 0, 0, 0, 0, -1, 0])
+        maxValues = np.array([1, 1, 1, 1, 1, 1, 1])
 
         #диапазон изменений
         self.observation_space = spaces.Box(minValues, maxValues, dtype=np.float32)
@@ -138,7 +138,7 @@ class TradingCoinEnv(gym.Env):
     # Render the environment to the screen
     def render(self, mode='human'):
         cur_price = self.df.at[self.current_index, "avrPrice"]
-        profit = self.pos.calcProfit(cur_price = cur_price)
+        profit = self.pos.calcProfit(current_price = cur_price)
 
         print(f'Step: {self.current_index}')
         print(f'Orders count: {len(self.pos.orders)}')
@@ -167,7 +167,7 @@ class TradingCoinEnv(gym.Env):
         ind1 = self.current_index - self.intervals_analize_cnt
         ind2 = self.current_index 
 
-        data = df.loc[ind1 : ind2, ['slope', 'buySize', 'sellSize', 'buyCnt', 'sellCnt', 'bitcoinChange']].to_numpy()
+        data = self.df.loc[ind1 : ind2, ['slope', 'buySize', 'sellSize', 'buyCnt', 'sellCnt', 'bitcoinChange']].to_numpy()
 
         # текущий баланс в usd и coins
         usd = self.pos.current_usd / self.pos.max_usd
@@ -175,6 +175,10 @@ class TradingCoinEnv(gym.Env):
 
         assert usd < 1 and coins < 1, 'usd or coins greater max'
 
-        balances = [[usd, coins]]
+        nz = np.zeros((data.shape[0],1), dtype=float)
+        nz[0,0] = usd
+        nz[1,0] = coins
 
-        return np.concatenate((balances, data), axis=0)
+        result = np.concatenate((data, nz), axis=1).transpose()
+
+        return result

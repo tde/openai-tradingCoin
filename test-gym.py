@@ -1,10 +1,11 @@
 import os
 import gym
+import sys
 import pandas as pd
 from stable_baselines.common.policies import MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import PPO2
-
+from stable_baselines.common.env_checker import check_env
 from env.trading_coin_env import TradingCoinEnv
 
 props = {
@@ -47,4 +48,8 @@ df.rename(columns=lambda x: x.strip(), inplace=True)
 # The algorithms require a vectorized environment to run
 #env = DummyVecEnv([lambda: TradingCoinEnv(df, cfg)])
 
-te = TradingCoinEnv(df, cfg)
+env = TradingCoinEnv(df, cfg)
+
+obs = env.reset()
+
+check_env(env, warn=True)
