@@ -2,6 +2,7 @@ import os
 import gym
 import sys
 import pandas as pd
+import numpy as np
 from stable_baselines.common.policies import MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import PPO2
@@ -45,11 +46,20 @@ file_name = os.path.join(os.path.dirname(__file__), DATASET_PATH + "/binanceOpen
 df = pd.read_csv(file_name)
 df.rename(columns=lambda x: x.strip(), inplace=True)
 
+df['avrPrice'] = df['avrPrice'].replace(to_replace=0, method='ffill')
+
 # The algorithms require a vectorized environment to run
 #env = DummyVecEnv([lambda: TradingCoinEnv(df, cfg)])
 
 env = TradingCoinEnv(df, cfg)
+env = DummyVecEnv([lambda: env])
+
+#check_env(env, warn=True)
+model = PPO2(MlpPolicy, env, verbose=1)
+model.learn(total_timesteps=10000)
 
 obs = env.reset()
-
-check_env(env, warn=True)
+for i in range(1000):
+    action, _states = model.predict(obs)
+    obs, rewards, dones, info = env.step(action)
+    env.render()

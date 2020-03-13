@@ -63,6 +63,8 @@ class TradingCoinEnv(gym.Env):
         assert df[df['bitcoinChange'] >= maxChangeBtc].shape[0] <= 0, 'maxBitcoinChange greater then default max'
         assert df[df['bitcoinChange'] <= -maxChangeBtc].shape[0] <= 0, 'minBitcoinChange lowest then default min'
 
+        self._observation_columns = ['slope', 'buySize', 'sellSize', 'buyCnt', 'sellCnt', 'bitcoinChange']
+
         df['slope'] /= maxSlopeDegree
         df['buySize'] /= maxSize
         df['sellSize'] /= maxSize
@@ -73,11 +75,19 @@ class TradingCoinEnv(gym.Env):
         #assert df[df > 1].shape[0] <= 0, 'dataframe contain values greate then 1'
         #assert df[df < -1].shape[0] <= 0, 'dataframe contain values lowest then -1'
 
+        
         minValues = np.array([-1, 0, 0, 0, 0, -1, 0])
         maxValues = np.array([1, 1, 1, 1, 1, 1, 1])
 
+        n_columns = len(self._observation_columns) + 1
+        n_rows = int(self.intervals_analize_cnt) + 1
+
         #диапазон изменений
-        self.observation_space = spaces.Box(minValues, maxValues, dtype=np.float32)
+        #self.observation_space = spaces.Box(low = minValues, high = maxValues, 
+        #         dtype=np.float32)
+        self.observation_space = spaces.Box(low = -1.0, high = 1.0, 
+                 shape=(n_rows, n_columns))
+                 
 
         self.reset()
     
@@ -116,7 +126,7 @@ class TradingCoinEnv(gym.Env):
         # распарсить тип действия и кол-во
         actionType, qtyRatio = self._parse_action(action)
         #print (actionType, qtyRatio)
-        qty = (self.cfg.balance_init if actionType == ActionType.BUY else self.cfg.crypto_coins_cnt_init) * qtyRatio
+        qty = (self.cfg.balance_init if actionType == ActionType.BUY else self.cfg.coins_init) * qtyRatio
         
         # действия - это покупка или продажа
         if (actionType != ActionType.HOLD):
@@ -167,18 +177,21 @@ class TradingCoinEnv(gym.Env):
         ind1 = self.current_index - self.intervals_analize_cnt
         ind2 = self.current_index 
 
-        data = self.df.loc[ind1 : ind2, ['slope', 'buySize', 'sellSize', 'buyCnt', 'sellCnt', 'bitcoinChange']].to_numpy()
+        data = self.df.loc[ind1 : ind2, self._observation_columns].to_numpy()
 
         # текущий баланс в usd и coins
         usd = self.pos.current_usd / self.pos.max_usd
         coins = self.pos.current_coins / self.pos.max_coins
 
-        assert usd < 1 and coins < 1, 'usd or coins greater max'
+        if (usd > 1 or coins > 1):
+            print ('error usd')
+
+        assert usd < 1 and coins < 1, f'usd or coins greater max {usd}, {coins}'
 
         nz = np.zeros((data.shape[0],1), dtype=float)
         nz[0,0] = usd
         nz[1,0] = coins
 
-        result = np.concatenate((data, nz), axis=1).transpose()
+        result = np.concatenate((data, nz), axis=1)
 
         return result

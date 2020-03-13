@@ -30,7 +30,7 @@ class Order:
     price = 0
     qty = 0
 
-    def __init__(self, type = None, price = None, qty = None, order = None):
+    def __init__(self, type, price, qty, order = None):
         if (order != None):
             self.type = order.type
             self.price = order.price
@@ -48,6 +48,9 @@ class Order:
         return self.price * self.qty
   
     def calcAmountWithSpread(self):
+        if (self.price == 0):
+            print('price == 0')
+
         if (self.type == ActionType.BUY):
             return self.qty / self.getPriceWithSpread()
         else:
@@ -85,6 +88,9 @@ class PositionStore:
 
     # Добавить ордер на закрытие
     def addOrder(self, order):
+        if (order.price == 0):
+            print ('order price == 0')
+
         # это покупка монет за USD
         if (order.type == ActionType.BUY):
             self.current_usd -= order.qty
