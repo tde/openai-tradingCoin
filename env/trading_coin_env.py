@@ -95,9 +95,9 @@ class TradingCoinEnv(gym.Env):
 
     #случайное начальное состояние
     def reset(self):
-        maxIndex = self.df.shape[0] - self.cfg.max_minutes_hold_pos * 60 / self.cfg.seconds_in_intrerval
+        maxIndex = self.df.shape[0] - self.cfg.max_minutes_hold_pos * 60 / self.cfg.seconds_in_intrerval - 7
         
-        self.current_index = random.randint(self.intervals_analize_cnt, maxIndex)
+        self.current_index = random.randint(self.intervals_analize_cnt+5, maxIndex)
         self.current_interation = 0
         
         initial_price = self.df.at[self.current_index, "avrPrice"]
