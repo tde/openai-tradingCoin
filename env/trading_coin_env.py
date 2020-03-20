@@ -137,7 +137,7 @@ class TradingCoinEnv(gym.Env):
                 (actionType == ActionType.SELL and qty > self.pos.current_coins)):
                     reward = -100 * self.cfg.balance_init
             else:
-                order = Order(type = actionType, price = cur_price, qty = qty)        
+                order = Order(type = actionType, price = cur_price, qty = qty, index = self.current_index)        
                 self.pos.addOrder(order)
         
         # расчет профита
