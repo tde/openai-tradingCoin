@@ -31,7 +31,7 @@ class Order:
     qty = 0
     index = 0
 
-    def __init__(self, type, price, qty, index):
+    def __init__(self, type, price, qty, index = None):
         self.type = type
         self.price = price
         self.qty = qty
