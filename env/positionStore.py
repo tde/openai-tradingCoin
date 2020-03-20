@@ -29,16 +29,13 @@ class Order:
     type = None
     price = 0
     qty = 0
+    index = 0
 
-    def __init__(self, type, price, qty, order = None):
-        if (order != None):
-            self.type = order.type
-            self.price = order.price
-            self.qty = qty
-        else:
-            self.type = type
-            self.price = price
-            self.qty = qty
+    def __init__(self, type, price, qty, index):
+        self.type = type
+        self.price = price
+        self.qty = qty
+        self.index = index
 
     def getPriceWithSpread(self):
         k =  (1 + SPREAD_RATE) if self.type == ActionType.BUY else (1 - SPREAD_RATE)
@@ -102,10 +99,13 @@ class PositionStore:
 
         self.orders.append(order)
 
+    def getLastOrder(self): 
+        return self.orders[-1]
+
     # вычислить суммарный баланс в USD
     def calcTotalBalance(self, current_price):
         price = current_price if current_price != None else self.initial_price
-        dummy_order = Order(type = ActionType.SELL, price = price, qty = self.current_coins)
+        dummy_order = Order(type = ActionType.SELL, price = price, qty = self.current_coins, index = 0)
         return self.current_usd + dummy_order.calcAmountWithSpread() * (1 - COMMISION_RATE)
 
     def calcProfit(self, current_price):

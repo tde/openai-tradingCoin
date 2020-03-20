@@ -10,20 +10,27 @@ from env.positionStore import ActionType
 class TradingCoinEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    #хранилище позиций
+    # хранилище позиций
     pos = None
 
-    #индекс текущей записи (на которую указывает анализируемый временной отрезок)
+    # минимальное время в течении которого надо удерживать позицию
+    min_intervals_hold_pos = 20
+
+    # индекс текущей записи (на которую указывает анализируемый временной отрезок)
     current_index = 0
 
     # сколько всего выполнено интераций
+    current_interation = 0
 
-
-    #текущий баланс в USD
+    # текущий баланс в USD
     current_balance = 0
 
     #текущее кол-во монет
     current_crypto_coins_cnt = 0
+
+    # индекс строки в которой была последняя покупка
+    last_buy_index = 0
+    last_sell_index = 0
 
     def __init__(self, df, cfg):
         self.df = df
@@ -72,13 +79,6 @@ class TradingCoinEnv(gym.Env):
         df['sellCnt'] /= maxCount
         df['bitcoinChange'] /= maxChangeBtc
 
-        #assert df[df > 1].shape[0] <= 0, 'dataframe contain values greate then 1'
-        #assert df[df < -1].shape[0] <= 0, 'dataframe contain values lowest then -1'
-
-        
-        minValues = np.array([-1, 0, 0, 0, 0, -1, 0])
-        maxValues = np.array([1, 1, 1, 1, 1, 1, 1])
-
         n_columns = len(self._observation_columns) + 1
         n_rows = int(self.intervals_analize_cnt) + 1
 
@@ -99,6 +99,8 @@ class TradingCoinEnv(gym.Env):
         
         self.current_index = random.randint(self.intervals_analize_cnt+5, maxIndex)
         self.current_interation = 0
+        self.last_buy_index = 0
+        self.last_sell_index = 0
         
         initial_price = self.df.at[self.current_index, "avrPrice"]
 
@@ -140,6 +142,20 @@ class TradingCoinEnv(gym.Env):
         
         # расчет профита
         reward = self.pos.calcProfit(current_price = cur_price)
+
+        # штраф за слишком быструю "обратную" сделку
+        diff_index = 1
+        if (actionType == ActionType.BUY):
+            diff_index = self.current_index - self.last_sell_index
+            self.last_buy_index = self.current_index
+        elif (actionType == ActionType.SELL):
+            diff_index = self.current_index - self.last_buy_index
+            self.last_sell_index = self.current_index
+
+        if (diff_index <= self.min_intervals_hold_pos):
+            reward = -2 * self.pos.initial_total_balance
+        else:
+            reward *= 2 * np.arctan((diff_index - self.min_intervals_hold_pos) * 0.03) / np.pi
 
         obs = self._next_observation()
         
