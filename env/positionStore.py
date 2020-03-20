@@ -29,13 +29,11 @@ class Order:
     type = None
     price = 0
     qty = 0
-    index = 0
 
-    def __init__(self, type, price, qty, index = None):
+    def __init__(self, type, price, qty):
         self.type = type
         self.price = price
         self.qty = qty
-        self.index = index
 
     def getPriceWithSpread(self):
         k =  (1 + SPREAD_RATE) if self.type == ActionType.BUY else (1 - SPREAD_RATE)
