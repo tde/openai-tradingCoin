@@ -4,9 +4,12 @@ import sys
 import pandas as pd
 import numpy as np
 from stable_baselines.common.policies import MlpPolicy
+from stable_baselines.common.policies import CnnPolicy
+from stable_baselines.common.policies import CnnLstmPolicy
 from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines import PPO2
-from stable_baselines.common.env_checker import check_env
+from stable_baselines import DQN
+from stable_baselines import A2C
 from env.trading_coin_env import TradingCoinEnv
 
 props = {
@@ -24,7 +27,7 @@ props = {
     'history_analise_minutes': 900,
 
     #максимальное время удержания позиции (в минутах)
-    'max_minutes_hold_pos': 600,
+    'max_minutes_hold_pos': 800,
 
     #сколько секунд в одном интервале
     'seconds_in_intrerval': 15,
@@ -55,11 +58,14 @@ env = TradingCoinEnv(df, cfg)
 env = DummyVecEnv([lambda: env])
 
 #check_env(env, warn=True)
+#model = DQN("MlpPolicy", env, verbose=1)
 model = PPO2(MlpPolicy, env, verbose=1)
-model.learn(total_timesteps=10000)
+#model.learn(total_timesteps=500000)
+#model.save("ppo2-trading")
+model.load("ppo2-trading")
 
 obs = env.reset()
-for i in range(1000):
+for i in range(2):
     action, _states = model.predict(obs)
     obs, rewards, dones, info = env.step(action)
     env.render()

@@ -41,6 +41,9 @@ class TradingCoinEnv(gym.Env):
         #сколько исторических интревалов учитывается при анализе
         self.intervals_analize_cnt = self.cfg.history_analise_minutes * 60 / self.cfg.seconds_in_intrerval
 
+        #сколько исторических интревалов учитывается при анализе
+        self.intervals_hold_cnt = self.cfg.max_minutes_hold_pos * 60 / self.cfg.seconds_in_intrerval
+
         #кол-во action'ов = насколько честей разбивается баланс (возможна покупка и продажа) + hold
         self.actions_count = 2 * self.cfg.balance_parts + 1
 
@@ -95,9 +98,8 @@ class TradingCoinEnv(gym.Env):
 
     #случайное начальное состояние
     def reset(self):
-        maxIndex = self.df.shape[0] - self.cfg.max_minutes_hold_pos * 60 / self.cfg.seconds_in_intrerval - 7
-        
-        self.current_index = random.randint(self.intervals_analize_cnt+5, maxIndex)
+        self.current_index = random.randint(self.intervals_analize_cnt + 1, 
+                                            self.df.shape[0] - self.intervals_hold_cnt - 15)
         self.current_interation = 0
         self.last_buy_index = 0
         self.last_sell_index = 0
@@ -121,8 +123,13 @@ class TradingCoinEnv(gym.Env):
         # цена на данном отрезке
         cur_price = self.df.at[self.current_index, "avrPrice"]
 
+        # fix
+        if (self.current_index >= self.df.shape[0]-1):
+            print (f'current interation {self.current_interation}, current_index {self.current_index}')
+            raise f'Bad step index'
+
         # проверка что закончился максимальный срок удержания позиции
-        if (self.current_interation >= self.intervals_analize_cnt):
+        if (self.current_interation >= self.intervals_hold_cnt):
             done = True
 
         # распарсить тип действия и кол-во
