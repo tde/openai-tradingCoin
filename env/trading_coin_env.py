@@ -2,6 +2,7 @@ import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
 import numpy as np
+import pandas as pd
 import random
 from env.positionStore import PositionStore
 from env.positionStore import Order
@@ -51,14 +52,14 @@ class TradingCoinEnv(gym.Env):
         self.action_space = spaces.Discrete(self.actions_count)
 
         #максимальный угол наклона для линейной регрессии в одном интервале
-        maxSlopeDegree = 2.0
+        maxSlopeDegree = 3.0
 
         #максимальные объем и кол-во сделок по покупке/продаже в одном интервале
-        maxSize = 40000.0
+        maxSize = 120000.0
         maxCount = 1000.0
 
         #максимальное относительное измнение btc/usdt в процентах
-        maxChangeBtc = 2.0
+        maxChangeBtc = 3.0
 
         # проверки на попадание в мин_макс значения
         assert df[df['slope'] <= -maxSlopeDegree].shape[0] <= 0, 'Slope lowest then default min'
@@ -98,8 +99,12 @@ class TradingCoinEnv(gym.Env):
 
     #случайное начальное состояние
     def reset(self):
+        print ('reset!!!')
         self.current_index = random.randint(self.intervals_analize_cnt + 1, 
                                             self.df.shape[0] - self.intervals_hold_cnt - 15)
+        
+        print (f'current index = {self.current_index}')
+
         self.current_interation = 0
         self.last_buy_index = 0
         self.last_sell_index = 0
@@ -111,6 +116,11 @@ class TradingCoinEnv(gym.Env):
 
         return self._next_observation()
 
+    # фиксированное начальное положение 
+    def set_first_index(self, idx = None):
+        self.current_index = idx if idx != None else int(self.intervals_analize_cnt + 10)
+        print (f'current index = {self.current_index}')
+
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
 
@@ -119,6 +129,8 @@ class TradingCoinEnv(gym.Env):
         # следующий временной отрезок
         self.current_index += 1
         self.current_interation += 1
+
+        #print (f'step = {self.current_index}')
 
         # цена на данном отрезке
         cur_price = self.df.at[self.current_index, "avrPrice"]
@@ -129,12 +141,15 @@ class TradingCoinEnv(gym.Env):
             raise f'Bad step index'
 
         # проверка что закончился максимальный срок удержания позиции
-        if (self.current_interation >= self.intervals_hold_cnt):
-            done = True
+        #if (self.current_interation >= self.intervals_hold_cnt):
+        #    done = True
+
+        # если достигнута последняя запись данных
+        done = True if self.current_index >= self.df.shape[0]-10 else False
 
         # распарсить тип действия и кол-во
         actionType, qtyRatio = self._parse_action(action)
-        #print (actionType, qtyRatio)
+        #print (f'actionType = {actionType}, qtyRatio = {qtyRatio}')
         qty = (self.cfg.balance_init if actionType == ActionType.BUY else self.cfg.coins_init) * qtyRatio
         
         # действия - это покупка или продажа
@@ -143,9 +158,11 @@ class TradingCoinEnv(gym.Env):
             if ((actionType == ActionType.BUY and qty > self.pos.current_usd) or
                 (actionType == ActionType.SELL and qty > self.pos.current_coins)):
                     reward = -100 * self.cfg.balance_init
+                    return self._next_observation(), reward, done, {}
             else:
-                order = Order(type = actionType, price = cur_price, qty = qty)        
+                order = Order(type = actionType, price = cur_price, qty = qty, index = self.current_index)        
                 self.pos.addOrder(order)
+                #print (f'\tadd new order, i={len(self.pos.orders)} cur_index={self.current_index}')
         
         # расчет профита
         reward = self.pos.calcProfit(current_price = cur_price)
@@ -173,11 +190,17 @@ class TradingCoinEnv(gym.Env):
         cur_price = self.df.at[self.current_index, "avrPrice"]
         profit = self.pos.calcProfit(current_price = cur_price)
 
-        print(f'Step: {self.current_index}')
+        #print(f'Step: {self.current_index}')
         print(f'Orders count: {len(self.pos.orders)}')
         print(f'Balance Usd: {self.pos.current_usd}')
         print(f'Balance Coins: {self.pos.current_coins}')
         print(f'Profit: {profit}')
+        #print('orders: ')
+        #self.pos.showOrders()
+        usd_change = self.pos.current_usd - self.cfg.balance_init
+        coins_change = self.pos.current_coins - self.cfg.coins_init
+
+        return pd.Series([len(self.pos.orders), usd_change, coins_change, profit])
         
     def close(self):
         print('close')
@@ -188,7 +211,7 @@ class TradingCoinEnv(gym.Env):
         
         actionInd = action_number // self.cfg.balance_parts
         if (actionInd > 1):
-            raise "Action type errorr define"
+            raise "Action type error define"
 
         actionType = ActionType(actionInd)
         reminder = action_number % self.cfg.balance_parts

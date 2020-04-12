@@ -113,4 +113,8 @@ class PositionStore:
     def show(self, current_price): 
         profit = self.calcTotalBalance(current_price) - self.initial_total_balance
         print ('Orders count: {}, current_usd: {}, current_coins: {}, profit = {}'
-        .format(len(self.orders), self.current_usd, self.current_coins, profit))
+            .format(len(self.orders), self.current_usd, self.current_coins, profit))
+
+    def showOrders(self): 
+        for o in self.orders:
+            print (f'\tindex = {o.index}, type = {o.type.name}, price = {o.price}, qty = {o.qty}')

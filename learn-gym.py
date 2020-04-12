@@ -27,7 +27,7 @@ props = {
     'history_analise_minutes': 900,
 
     #максимальное время удержания позиции (в минутах)
-    'max_minutes_hold_pos': 800,
+    'max_minutes_hold_pos': 1200,
 
     #сколько секунд в одном интервале
     'seconds_in_intrerval': 15,
@@ -51,21 +51,18 @@ df.rename(columns=lambda x: x.strip(), inplace=True)
 
 df['avrPrice'] = df['avrPrice'].replace(to_replace=0, method='ffill')
 
-# The algorithms require a vectorized environment to run
-#env = DummyVecEnv([lambda: TradingCoinEnv(df, cfg)])
-
 env = TradingCoinEnv(df, cfg)
 env = DummyVecEnv([lambda: env])
 
 #check_env(env, warn=True)
-#model = DQN("MlpPolicy", env, verbose=1)
+model = DQN("MlpPolicy", env, verbose=2)
 model = PPO2(MlpPolicy, env, verbose=1)
-#model.learn(total_timesteps=500000)
-#model.save("ppo2-trading")
-model.load("ppo2-trading")
+model.learn(total_timesteps=900000)
+model.save("trading3")
 
-obs = env.reset()
-for i in range(2):
-    action, _states = model.predict(obs)
-    obs, rewards, dones, info = env.step(action)
-    env.render()
+# дообучение
+'''
+model = PPO2.load("./trading2")
+model.learn(total_timesteps=900000)
+model.save("trading3")
+'''
