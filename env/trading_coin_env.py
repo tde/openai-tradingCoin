@@ -14,9 +14,6 @@ class TradingCoinEnv(gym.Env):
     # хранилище позиций
     pos = None
 
-    # минимальное время в течении которого надо удерживать позицию
-    min_intervals_hold_pos = 20
-
     # индекс текущей записи (на которую указывает анализируемый временной отрезок)
     current_index = 0
 
@@ -99,11 +96,10 @@ class TradingCoinEnv(gym.Env):
 
     #случайное начальное состояние
     def reset(self):
-        print ('reset!!!')
         self.current_index = random.randint(self.intervals_analize_cnt + 1, 
                                             self.df.shape[0] - self.intervals_hold_cnt - 15)
         
-        print (f'current index = {self.current_index}')
+        #print (f'current index = {self.current_index}')
 
         self.current_interation = 0
         self.last_buy_index = 0
@@ -113,7 +109,10 @@ class TradingCoinEnv(gym.Env):
 
         self.pos = PositionStore(initial_usd = self.cfg.balance_init, initial_coins = self.cfg.coins_init,
                                 initial_price = initial_price)
-
+                                
+        # минимальный баланс ниже которого прекращать обучениме
+        self.min_total_balance = self.pos.initial_total_balance * (1 - self.cfg.max_loss / 100)
+        
         return self._next_observation()
 
     # фиксированное начальное положение 
@@ -158,28 +157,20 @@ class TradingCoinEnv(gym.Env):
             if ((actionType == ActionType.BUY and qty > self.pos.current_usd) or
                 (actionType == ActionType.SELL and qty > self.pos.current_coins)):
                     reward = -100 * self.cfg.balance_init
+                    done = True
                     return self._next_observation(), reward, done, {}
             else:
                 order = Order(type = actionType, price = cur_price, qty = qty, index = self.current_index)        
                 self.pos.addOrder(order)
                 #print (f'\tadd new order, i={len(self.pos.orders)} cur_index={self.current_index}')
         
-        # расчет профита
-        reward = self.pos.calcProfit(current_price = cur_price)
+        # расчет нового баланса
+        curr_total_balance = self.pos.calcTotalBalance(current_price = cur_price)
+        reward = curr_total_balance - self.pos.initial_total_balance
 
-        # штраф за слишком быструю "обратную" сделку
-        diff_index = 1
-        if (actionType == ActionType.BUY):
-            diff_index = self.current_index - self.last_sell_index
-            self.last_buy_index = self.current_index
-        elif (actionType == ActionType.SELL):
-            diff_index = self.current_index - self.last_buy_index
-            self.last_sell_index = self.current_index
-
-        if (diff_index <= self.min_intervals_hold_pos):
-            reward = -2 * self.pos.initial_total_balance
-        else:
-            reward *= 2 * np.arctan((diff_index - self.min_intervals_hold_pos) * 0.03) / np.pi
+        # если убыток уже больше чем задано в конфиге, то выход
+        if (done == False):
+            done == curr_total_balance < self.min_total_balance
 
         obs = self._next_observation()
         

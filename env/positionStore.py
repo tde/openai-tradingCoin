@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from enum import Enum
+import numpy as np
 
 """
 Профит считается гипотететически
@@ -72,6 +73,10 @@ class PositionStore:
     # начальный баланс пересчитанный в USD
     initial_total_balance = 0
 
+    # индекс в резалтсете на которых была последняя покупка/продажа
+    last_buy_index = 0
+    last_sell_index = 0
+
     def __init__(self, initial_usd, initial_coins, initial_price):
         self.current_usd = initial_usd
         self.current_coins = initial_coins
@@ -87,13 +92,23 @@ class PositionStore:
         if (order.price == 0):
             print ('order price == 0')
 
+        # штраф за слишком быструю "обратную" сделку
+        if (order.type == ActionType.BUY):
+            diff_index = (order.index - self.last_sell_index) if self.last_sell_index > 0 else 10000
+            self.last_buy_index = order.index
+        elif (order.type == ActionType.SELL):
+            diff_index = (order.index - self.last_buy_index) if self.last_buy_index > 0 else 10000
+            self.last_sell_index = order.index
+
+        reduce_coef = 2 * np.arctan(diff_index * 0.2) / np.pi
+
         # это покупка монет за USD
         if (order.type == ActionType.BUY):
             self.current_usd -= order.qty
-            self.current_coins += order.calcAmountWithSpread() * (1 - COMMISION_RATE)
+            self.current_coins += order.calcAmountWithSpread() * (1 - COMMISION_RATE) * reduce_coef
         # это продажа монет 
         else:
-            self.current_usd += order.calcAmountWithSpread() * (1 - COMMISION_RATE)
+            self.current_usd += order.calcAmountWithSpread() * (1 - COMMISION_RATE) * reduce_coef
             self.current_coins -= order.qty
 
         self.orders.append(order)

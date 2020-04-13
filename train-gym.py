@@ -34,6 +34,9 @@ props = {
 
     #сколько исторических интервалов до текущего надо учитывать
     #'lookback_window_size': 20
+
+    #максимальная просадка в %
+    'max_loss': 20
 }
 
 class Config:
@@ -45,46 +48,32 @@ cfg = Config(**props)
 
 #read data from file
 DATASET_PATH = "data"
+file_name = os.path.join(os.path.dirname(__file__), DATASET_PATH + "/binanceOpenAi-20191126-20191231.dat")
+df = pd.read_csv(file_name)
+df.rename(columns=lambda x: x.strip(), inplace=True)
 
-def prepare_df(fileName):
-    file_name = os.path.join(os.path.dirname(__file__), DATASET_PATH + "/" + fileName)
-    df = pd.read_csv(file_name)
-    df.rename(columns=lambda x: x.strip(), inplace=True)
-    df['avrPrice'] = df['avrPrice'].replace(to_replace=0, method='ffill')
+df['avrPrice'] = df['avrPrice'].replace(to_replace=0, method='ffill')
 
-    return df
-
-df = prepare_df("binanceOpenAi-20191126-20191231.dat")
+# The algorithms require a vectorized environment to run
+#env = DummyVecEnv([lambda: TradingCoinEnv(df, cfg)])
 
 env = TradingCoinEnv(df, cfg)
-#env = DummyVecEnv([lambda: env])
+env = DummyVecEnv([lambda: env])
 
-analize_row_cnt = int(cfg.history_analise_minutes * 60 / cfg.seconds_in_intrerval)
-result_all = pd.DataFrame()
+model = PPO2(MlpPolicy, env, verbose=1)
 
-for ind in range(1,20):
-    fileModel = os.path.dirname(__file__) + "/trained_models/ppo/model_" + str(ind)
-    print(fileModel)
+for i in range(1, 5):
+    #каждые 100_000 анализ
+    model.learn(total_timesteps=200000)
+    fn = os.path.dirname(__file__) + "/trained_models/ppo/model_" + str(i)
+    model.save(fn)
 
-    model = PPO2.load(fileModel)
 
-    obs = env.reset()
-    env.set_first_index()
-
-    for i in range(df.shape[0] - analize_row_cnt - 20):
-        action, _states = model.predict(obs)
-
-        if (i % 500 == 0):
-            print(i)
-
-        obs, rewards, done, info = env.step(action)
-        if (done == True):
-            print ('Done = true')
-
-    row_result = env.render()
-    result_all = result_all.append(row_result, ignore_index=True)
-
-result_all.columns = ['order_count', 'usd_change', 'coins_change', 'profit']
-
-print (f'result = {result_all}')
-result_all.to_csv(r'./result_all.txt', sep='\t')
+#check_env(env, warn=True)
+#model = DQN("MlpPolicy", env, verbose=1)
+#model = PPO2(MlpPolicy, env, verbose=1)
+#model.learn(total_timesteps=500000)
+#model.save("ppo2-trading")
+#model = PPO2.load("./trading3")
+#model.set_env(env)
+#model.learn(total_timesteps=500000)
