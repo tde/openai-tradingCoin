@@ -62,9 +62,9 @@ env = DummyVecEnv([lambda: env])
 
 model = PPO2(MlpPolicy, env, verbose=1)
 
-for i in range(1, 5):
+for i in range(1, 10):
     #каждые 100_000 анализ
-    model.learn(total_timesteps=200000)
+    model.learn(total_timesteps=500000)
     fn = os.path.dirname(__file__) + "/trained_models/ppo/model_" + str(i)
     model.save(fn)
 

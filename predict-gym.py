@@ -34,6 +34,9 @@ props = {
 
     #сколько исторических интервалов до текущего надо учитывать
     #'lookback_window_size': 20
+
+    #максимальная просадка в %
+    'max_loss': 20
 }
 
 class Config:
@@ -62,7 +65,7 @@ env = TradingCoinEnv(df, cfg)
 analize_row_cnt = int(cfg.history_analise_minutes * 60 / cfg.seconds_in_intrerval)
 result_all = pd.DataFrame()
 
-for ind in range(1,20):
+for ind in range(7, 10):
     fileModel = os.path.dirname(__file__) + "/trained_models/ppo/model_" + str(ind)
     print(fileModel)
 
